@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Project } from "../types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Film, FolderOpen } from "lucide-react";
+import { Plus, Trash2, Clapperboard, FolderOpen } from "lucide-react";
 
 interface Props {
   onCreateNew: () => void;
@@ -30,14 +30,14 @@ export default function ProjectSelector({ onCreateNew, onOpenProject }: Props) {
   if (projects.length === 0) {
     return (
       <div className="flex-1 flex flex-col">
-        <div className="h-12 flex items-center justify-center shrink-0 titlebar-drag">
+        <div className="h-12 flex items-center justify-center shrink-0 pl-20 titlebar-drag">
           <h1 className="text-sm font-medium text-muted-foreground">
             Remotion Desktop
           </h1>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <Film className="h-20 w-20 text-muted-foreground/40 mx-auto mb-6" />
+            <Clapperboard className="h-20 w-20 text-muted-foreground/40 mx-auto mb-6" />
             <h2 className="text-2xl font-bold tracking-tight mb-2">
               Erstelle dein erstes Projekt
             </h2>
@@ -58,7 +58,7 @@ export default function ProjectSelector({ onCreateNew, onOpenProject }: Props) {
   // Has projects: list view
   return (
     <div className="flex-1 flex flex-col">
-      <div className="h-12 flex items-center justify-center shrink-0">
+      <div className="h-12 flex items-center justify-center shrink-0 pl-20 titlebar-drag">
         <h1 className="text-sm font-medium text-muted-foreground">
           Remotion Desktop
         </h1>
@@ -69,7 +69,7 @@ export default function ProjectSelector({ onCreateNew, onOpenProject }: Props) {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                <Film className="h-8 w-8" />
+                <Clapperboard className="h-8 w-8" />
                 Deine Projekte
               </h2>
               <p className="text-muted-foreground mt-1">
@@ -92,7 +92,7 @@ export default function ProjectSelector({ onCreateNew, onOpenProject }: Props) {
                 <CardContent className="flex items-center justify-between p-4">
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Film className="h-6 w-6 text-primary" />
+                      <Clapperboard className="h-6 w-6 text-primary" />
                     </div>
                     <div>
                       <h3 className="font-semibold">{project.name}</h3>

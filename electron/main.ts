@@ -1,9 +1,17 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  protocol,
+  net,
+} from "electron";
 import path from "path";
 import fs from "fs";
 import { ChildProcess, spawn, exec } from "child_process";
 import { v4 as uuidv4 } from "uuid";
-import net from "net";
+import netModule from "net";
 
 // Types
 interface Project {
@@ -47,10 +55,13 @@ function writeConfig(config: AppConfig) {
 // Dev server process tracking
 const devServers: Map<string, ChildProcess> = new Map();
 
+// Directory watchers
+const dirWatchers: Map<string, fs.FSWatcher> = new Map();
+
 // Find a free port
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
-    const server = net.createServer();
+    const server = netModule.createServer();
     server.listen(0, () => {
       const addr = server.address();
       if (addr && typeof addr === "object") {
@@ -302,7 +313,7 @@ function waitForPort(port: number, timeout = 30000): Promise<void> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     function tryConnect() {
-      const socket = new net.Socket();
+      const socket = new netModule.Socket();
       socket
         .once("connect", () => {
           socket.destroy();
@@ -401,15 +412,127 @@ ipcMain.handle("open-in-claude", (_event, projectPath: string) => {
 });
 
 ipcMain.handle("open-in-finder", (_event, filePath: string) => {
-  shell.showItemInFolder(filePath);
+  shell.openPath(filePath);
 });
 
 ipcMain.handle("get-platform", () => {
   return process.platform;
 });
 
+// Get rendered output files from out/ directory (recursive)
+ipcMain.handle("get-renders", (_event, projectPath: string) => {
+  const outDir = path.join(projectPath, "out");
+  if (!fs.existsSync(outDir)) return [];
+
+  const results: {
+    name: string;
+    path: string;
+    size: number;
+    type: "image" | "video" | "audio" | "other";
+  }[] = [];
+
+  function scanDir(dir: string, prefix: string) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const fullPath = path.join(dir, entry.name);
+      const displayName = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        scanDir(fullPath, displayName);
+      } else {
+        const stat = fs.statSync(fullPath);
+        const ext = path.extname(entry.name).toLowerCase();
+        const isImage = [
+          ".png",
+          ".jpg",
+          ".jpeg",
+          ".gif",
+          ".webp",
+          ".svg",
+          ".bmp",
+        ].includes(ext);
+        const isVideo = [".mp4", ".webm", ".mov", ".avi", ".mkv"].includes(ext);
+        const isAudio = [".mp3", ".wav", ".ogg", ".aac", ".flac"].includes(ext);
+
+        let type: "image" | "video" | "audio" | "other" = "other";
+        if (isImage) type = "image";
+        else if (isVideo) type = "video";
+        else if (isAudio) type = "audio";
+
+        results.push({
+          name: displayName,
+          path: fullPath,
+          size: stat.size,
+          type,
+        });
+      }
+    }
+  }
+
+  scanDir(outDir, "");
+  return results;
+});
+
+// Watch a directory for changes and notify the renderer
+ipcMain.handle("watch-directory", (_event, dirPath: string, label: string) => {
+  // Don't double-watch
+  if (dirWatchers.has(dirPath)) return;
+  if (!fs.existsSync(dirPath)) return;
+
+  let debounce: ReturnType<typeof setTimeout> | null = null;
+  const watcher = fs.watch(dirPath, { recursive: true }, () => {
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      mainWindow?.webContents.send("directory-changed", dirPath, label);
+    }, 300);
+  });
+
+  dirWatchers.set(dirPath, watcher);
+});
+
+ipcMain.handle("unwatch-directory", (_event, dirPath: string) => {
+  const watcher = dirWatchers.get(dirPath);
+  if (watcher) {
+    watcher.close();
+    dirWatchers.delete(dirPath);
+  }
+});
+
+// Register custom protocol for serving local asset files
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "local-asset",
+    privileges: {
+      bypassCSP: true,
+      stream: true,
+      supportFetchAPI: true,
+    },
+  },
+]);
+
+// Open file with system default application
+ipcMain.handle("open-with-system", (_event, filePath: string) => {
+  return shell.openPath(filePath);
+});
+
+// Read text file contents
+ipcMain.handle("read-file-text", (_event, filePath: string) => {
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath, "utf-8");
+});
+
 // App lifecycle
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Register protocol handler for local asset files
+  protocol.handle("local-asset", (request) => {
+    const filePath = decodeURIComponent(
+      request.url.replace("local-asset://file/", ""),
+    );
+    return net.fetch(`file://${filePath}`);
+  });
+
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   // Kill all dev servers on quit
@@ -417,6 +540,12 @@ app.on("window-all-closed", () => {
     child.kill();
   }
   devServers.clear();
+
+  // Close all directory watchers
+  for (const [, watcher] of dirWatchers) {
+    watcher.close();
+  }
+  dirWatchers.clear();
 
   if (process.platform !== "darwin") {
     app.quit();

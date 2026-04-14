@@ -34,6 +34,8 @@ const api = {
     ipcRenderer.invoke("copy-to-public", projectPath, files),
   getAssets: (projectPath: string): Promise<Asset[]> =>
     ipcRenderer.invoke("get-assets", projectPath),
+  getRenders: (projectPath: string): Promise<Asset[]> =>
+    ipcRenderer.invoke("get-renders", projectPath),
   deleteAsset: (projectPath: string, filename: string): Promise<void> =>
     ipcRenderer.invoke("delete-asset", projectPath, filename),
   getAssetDataUrl: (filePath: string): Promise<string | null> =>
@@ -58,7 +60,17 @@ const api = {
     ipcRenderer.invoke("open-in-claude", projectPath),
   openInFinder: (path: string): Promise<void> =>
     ipcRenderer.invoke("open-in-finder", path),
+  openWithSystem: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke("open-with-system", filePath),
+  readFileText: (filePath: string): Promise<string | null> =>
+    ipcRenderer.invoke("read-file-text", filePath),
   getPlatform: (): Promise<string> => ipcRenderer.invoke("get-platform"),
+
+  // Directory watching
+  watchDirectory: (dirPath: string, label: string): Promise<void> =>
+    ipcRenderer.invoke("watch-directory", dirPath, label),
+  unwatchDirectory: (dirPath: string): Promise<void> =>
+    ipcRenderer.invoke("unwatch-directory", dirPath),
 
   // Events
   onDevServerStopped: (callback: (projectPath: string) => void) => {
@@ -66,6 +78,15 @@ const api = {
       callback(projectPath);
     ipcRenderer.on("dev-server-stopped", handler);
     return () => ipcRenderer.removeListener("dev-server-stopped", handler);
+  },
+  onDirectoryChanged: (callback: (dirPath: string, label: string) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      dirPath: string,
+      label: string,
+    ) => callback(dirPath, label);
+    ipcRenderer.on("directory-changed", handler);
+    return () => ipcRenderer.removeListener("directory-changed", handler);
   },
 };
 
