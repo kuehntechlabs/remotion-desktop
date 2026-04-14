@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Play,
   Square,
-  Globe,
   Plus,
   Trash2,
   FileVideo,
@@ -17,7 +16,6 @@ import {
   FolderOpen,
   Loader2,
   ExternalLink,
-  X,
   Film,
 } from "lucide-react";
 
@@ -44,7 +42,6 @@ export default function Dashboard({ project, onBack }: Props) {
   const [serverPort, setServerPort] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [showBrowser, setShowBrowser] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const webviewRef = useRef<HTMLWebViewElement>(null);
 
@@ -56,7 +53,6 @@ export default function Dashboard({ project, onBack }: Props) {
       if (path === project.path) {
         setServerRunning(false);
         setServerPort(null);
-        setShowBrowser(false);
       }
     });
 
@@ -88,7 +84,6 @@ export default function Dashboard({ project, onBack }: Props) {
       await window.remotion.stopDevServer(project.path);
       setServerRunning(false);
       setServerPort(null);
-      setShowBrowser(false);
     } else {
       setStarting(true);
       try {
@@ -158,7 +153,7 @@ export default function Dashboard({ project, onBack }: Props) {
   return (
     <div className="flex-1 flex flex-col h-screen">
       {/* Titelleiste */}
-      <div className="h-12 flex items-center px-4 shrink-0 border-b">
+      <div className="h-12 flex items-center px-4 shrink-0 border-b titlebar-drag">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Projekte
@@ -196,20 +191,12 @@ export default function Dashboard({ project, onBack }: Props) {
             </Button>
 
             {serverRunning && serverPort && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setShowBrowser(!showBrowser)}
-                >
-                  <Globe className="h-4 w-4 mr-2" />
-                  {showBrowser ? "Vorschau ausblenden" : "Vorschau anzeigen"}
-                </Button>
-                <Badge variant="secondary" className="flex items-center">
-                  :{serverPort}
-                </Badge>
-              </div>
+              <Badge
+                variant="secondary"
+                className="flex items-center justify-center"
+              >
+                Läuft auf Port :{serverPort}
+              </Badge>
             )}
 
             <div className="flex gap-2">
@@ -290,35 +277,22 @@ export default function Dashboard({ project, onBack }: Props) {
 
         {/* Hauptbereich - Browser oder Willkommen */}
         <div className="flex-1 flex items-center justify-center bg-muted/30">
-          {showBrowser && serverRunning && serverPort ? (
-            <div className="w-full h-full relative">
-              <div className="absolute top-2 right-2 z-10">
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setShowBrowser(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <webview
-                ref={webviewRef as any}
-                src={`http://localhost:${serverPort}`}
-                className="w-full h-full"
-                style={{ display: "flex" }}
-              />
-            </div>
+          {serverRunning && serverPort ? (
+            <webview
+              ref={webviewRef as any}
+              src={`http://localhost:${serverPort}`}
+              className="w-full h-full"
+              style={{ display: "flex" }}
+            />
           ) : (
             <div className="text-center">
               <Film className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-muted-foreground mb-2">
-                {serverRunning ? "Server läuft" : "Starte den Dev-Server"}
+                Starte den Dev-Server
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
-                {serverRunning
-                  ? 'Klicke auf "Vorschau anzeigen", um dein Remotion-Projekt im eingebetteten Browser zu sehen'
-                  : "Klicke auf den Play-Button, um den Remotion-Entwicklungsserver zu starten und dein Projekt in der Vorschau zu sehen"}
+                Klicke auf den Play-Button, um den Remotion-Entwicklungsserver
+                zu starten und dein Projekt in der Vorschau zu sehen
               </p>
             </div>
           )}

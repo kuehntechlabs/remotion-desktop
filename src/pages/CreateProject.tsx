@@ -141,7 +141,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
   return (
     <div className="flex-1 flex flex-col">
       {/* Titelleiste */}
-      <div className="h-12 flex items-center px-4 shrink-0">
+      <div className="h-12 flex items-center px-4 shrink-0 titlebar-drag">
         <Button
           variant="ghost"
           size="sm"

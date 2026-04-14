@@ -297,6 +297,31 @@ ipcMain.handle("install-dependencies", (_event, projectPath: string) => {
   });
 });
 
+// Wait until a port is accepting connections
+function waitForPort(port: number, timeout = 30000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    function tryConnect() {
+      const socket = new net.Socket();
+      socket
+        .once("connect", () => {
+          socket.destroy();
+          resolve();
+        })
+        .once("error", () => {
+          socket.destroy();
+          if (Date.now() - start > timeout) {
+            reject(new Error(`Server did not start within ${timeout}ms`));
+          } else {
+            setTimeout(tryConnect, 500);
+          }
+        });
+      socket.connect(port, "127.0.0.1");
+    }
+    tryConnect();
+  });
+}
+
 // Dev server
 ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
   // Kill existing if running
@@ -325,6 +350,9 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
     devServers.delete(projectPath);
     mainWindow?.webContents.send("dev-server-stopped", projectPath);
   });
+
+  // Wait for the server to actually be ready before returning
+  await waitForPort(port);
 
   // Update config with port
   const config = readConfig();
