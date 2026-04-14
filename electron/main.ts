@@ -173,41 +173,62 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle("get-assets", (_event, projectPath: string) => {
-  const publicDir = path.join(projectPath, "public");
-  if (!fs.existsSync(publicDir)) return [];
+function isHiddenOrTemp(name: string): boolean {
+  if (name.startsWith(".")) return true;
+  if (name.startsWith("~")) return true;
+  if (name.startsWith("~$")) return true;
+  if (name.endsWith(".tmp")) return true;
+  if (name === "Thumbs.db" || name === ".DS_Store") return true;
+  return false;
+}
 
-  const files = fs.readdirSync(publicDir);
-  return files
-    .filter((f) => !f.startsWith("."))
-    .map((f) => {
-      const filePath = path.join(publicDir, f);
-      const stat = fs.statSync(filePath);
-      const ext = path.extname(f).toLowerCase();
-      const isImage = [
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".webp",
-        ".svg",
-        ".bmp",
-      ].includes(ext);
-      const isVideo = [".mp4", ".webm", ".mov", ".avi", ".mkv"].includes(ext);
-      const isAudio = [".mp3", ".wav", ".ogg", ".aac", ".flac"].includes(ext);
+function classifyFile(ext: string): "image" | "video" | "audio" | "other" {
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"].includes(ext))
+    return "image";
+  if ([".mp4", ".webm", ".mov", ".avi", ".mkv"].includes(ext)) return "video";
+  if ([".mp3", ".wav", ".ogg", ".aac", ".flac"].includes(ext)) return "audio";
+  return "other";
+}
 
-      let type: "image" | "video" | "audio" | "other" = "other";
-      if (isImage) type = "image";
-      else if (isVideo) type = "video";
-      else if (isAudio) type = "audio";
-
-      return {
-        name: f,
-        path: filePath,
+function scanDirectory(
+  dir: string,
+  prefix: string,
+): {
+  name: string;
+  path: string;
+  size: number;
+  type: "image" | "video" | "audio" | "other";
+}[] {
+  if (!fs.existsSync(dir)) return [];
+  const results: {
+    name: string;
+    path: string;
+    size: number;
+    type: "image" | "video" | "audio" | "other";
+  }[] = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (isHiddenOrTemp(entry.name)) continue;
+    const fullPath = path.join(dir, entry.name);
+    const displayName = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      results.push(...scanDirectory(fullPath, displayName));
+    } else {
+      const stat = fs.statSync(fullPath);
+      const ext = path.extname(entry.name).toLowerCase();
+      results.push({
+        name: displayName,
+        path: fullPath,
         size: stat.size,
-        type,
-      };
-    });
+        type: classifyFile(ext),
+      });
+    }
+  }
+  return results;
+}
+
+ipcMain.handle("get-assets", (_event, projectPath: string) => {
+  return scanDirectory(path.join(projectPath, "public"), "");
 });
 
 ipcMain.handle(
@@ -421,56 +442,7 @@ ipcMain.handle("get-platform", () => {
 
 // Get rendered output files from out/ directory (recursive)
 ipcMain.handle("get-renders", (_event, projectPath: string) => {
-  const outDir = path.join(projectPath, "out");
-  if (!fs.existsSync(outDir)) return [];
-
-  const results: {
-    name: string;
-    path: string;
-    size: number;
-    type: "image" | "video" | "audio" | "other";
-  }[] = [];
-
-  function scanDir(dir: string, prefix: string) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
-      const fullPath = path.join(dir, entry.name);
-      const displayName = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        scanDir(fullPath, displayName);
-      } else {
-        const stat = fs.statSync(fullPath);
-        const ext = path.extname(entry.name).toLowerCase();
-        const isImage = [
-          ".png",
-          ".jpg",
-          ".jpeg",
-          ".gif",
-          ".webp",
-          ".svg",
-          ".bmp",
-        ].includes(ext);
-        const isVideo = [".mp4", ".webm", ".mov", ".avi", ".mkv"].includes(ext);
-        const isAudio = [".mp3", ".wav", ".ogg", ".aac", ".flac"].includes(ext);
-
-        let type: "image" | "video" | "audio" | "other" = "other";
-        if (isImage) type = "image";
-        else if (isVideo) type = "video";
-        else if (isAudio) type = "audio";
-
-        results.push({
-          name: displayName,
-          path: fullPath,
-          size: stat.size,
-          type,
-        });
-      }
-    }
-  }
-
-  scanDir(outDir, "");
-  return results;
+  return scanDirectory(path.join(projectPath, "out"), "");
 });
 
 // Watch a directory for changes and notify the renderer

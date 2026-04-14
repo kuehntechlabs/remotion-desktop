@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Project } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,9 +46,27 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
   const [name, setName] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [scaffolding, setScaffolding] = useState(false);
   const [scaffoldStatus, setScaffoldStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Load thumbnails for image/video files
+  useEffect(() => {
+    async function loadThumbnails() {
+      for (const file of files) {
+        if (thumbnails[file]) continue;
+        const ext = file.split(".").pop()?.toLowerCase() || "";
+        if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"].includes(ext)) {
+          const dataUrl = await window.remotion.getAssetDataUrl(file);
+          if (dataUrl) {
+            setThumbnails((prev) => ({ ...prev, [file]: dataUrl }));
+          }
+        }
+      }
+    }
+    loadThumbnails();
+  }, [files]);
 
   async function handlePickFolder() {
     const selected = await window.remotion.pickFolder();
@@ -61,30 +79,8 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
   async function handlePickFiles() {
     const selected = await window.remotion.pickFiles([
       {
-        name: "Mediendateien",
-        extensions: [
-          "png",
-          "jpg",
-          "jpeg",
-          "gif",
-          "webp",
-          "svg",
-          "bmp",
-          "mp4",
-          "webm",
-          "mov",
-          "avi",
-          "mkv",
-          "mp3",
-          "wav",
-          "ogg",
-          "aac",
-          "flac",
-          "json",
-          "csv",
-          "txt",
-          "lottie",
-        ],
+        name: "Alle Dateien",
+        extensions: ["*"],
       },
     ]);
     if (selected.length > 0) {
@@ -253,8 +249,8 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
               <CardHeader>
                 <CardTitle className="text-lg">Dateien hinzufügen</CardTitle>
                 <CardDescription>
-                  Füge Bilder, Videos und Audiodateien zu deinem Projekt hinzu.
-                  Du kannst auch später weitere hinzufügen.
+                  Füge Bilder, Videos und andere Dateien zu deinem Projekt
+                  hinzu. Du kannst auch später weitere hinzufügen.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -263,30 +259,119 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
                   Dateien hinzufügen
                 </Button>
 
-                {files.length > 0 && (
-                  <div className="space-y-2 max-h-60 overflow-auto">
-                    {files.map((file) => {
-                      const filename = file.split("/").pop() || file;
-                      return (
-                        <div
-                          key={file}
-                          className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm"
-                        >
-                          {fileIcon(filename)}
-                          <span className="flex-1 truncate">{filename}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => removeFile(file)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                {files.length > 0 &&
+                  (() => {
+                    const mediaFiles = files.filter((f) => {
+                      const ext = f.split(".").pop()?.toLowerCase() || "";
+                      return [
+                        "png",
+                        "jpg",
+                        "jpeg",
+                        "gif",
+                        "webp",
+                        "svg",
+                        "bmp",
+                        "mp4",
+                        "webm",
+                        "mov",
+                        "avi",
+                        "mkv",
+                      ].includes(ext);
+                    });
+                    const otherFiles = files.filter(
+                      (f) => !mediaFiles.includes(f),
+                    );
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Media tiles */}
+                        {mediaFiles.length > 0 && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {mediaFiles.map((file) => {
+                              const filename = file.split("/").pop() || file;
+                              const ext =
+                                filename.split(".").pop()?.toLowerCase() || "";
+                              const isVideo = [
+                                "mp4",
+                                "webm",
+                                "mov",
+                                "avi",
+                                "mkv",
+                              ].includes(ext);
+                              return (
+                                <div
+                                  key={file}
+                                  className="relative group aspect-square rounded-lg overflow-hidden bg-muted border"
+                                >
+                                  {thumbnails[file] ? (
+                                    <img
+                                      src={thumbnails[file]}
+                                      alt={filename}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      {isVideo ? (
+                                        <FileVideo className="h-8 w-8 text-muted-foreground/50" />
+                                      ) : (
+                                        <FileImage className="h-8 w-8 text-muted-foreground/50" />
+                                      )}
+                                    </div>
+                                  )}
+                                  {isVideo && thumbnails[file] && (
+                                    <div className="absolute bottom-1 left-1">
+                                      <FileVideo className="h-4 w-4 text-white drop-shadow" />
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-1.5 pt-4">
+                                    <p className="text-[10px] text-white truncate">
+                                      {filename}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute top-1 right-1 h-5 w-5 bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100"
+                                    onClick={() => removeFile(file)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Other files as list */}
+                        {otherFiles.length > 0 && (
+                          <div className="space-y-1">
+                            {otherFiles.map((file) => {
+                              const filename = file.split("/").pop() || file;
+                              return (
+                                <div
+                                  key={file}
+                                  className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm"
+                                >
+                                  {fileIcon(filename)}
+                                  <span className="flex-1 truncate">
+                                    {filename}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => removeFile(file)}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                 <div className="flex gap-2">
                   <Button onClick={handleScaffold}>
