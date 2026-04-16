@@ -119,11 +119,11 @@ Updates work in packaged builds and require published GitHub releases.
 
 ## Release Workflow
 
-GitHub Actions is configured to release from tags and automate tagging on `main`:
+GitHub Actions is configured to release from tags and automate tagging on `main` and `dev`:
 
-1. Update `version` in `package.json` and merge/push to `main`
-2. Workflow `Tag Version on Main` creates `v<version>` if missing
-3. Workflow `Release Build` runs on that tag and publishes:
+1. Update `version` in `package.json` and push to `main` or `dev`
+2. Workflow `Tag Version and Trigger Release` creates `v<version>` if missing
+3. Workflow `Release Build` is triggered automatically for that tag and publishes:
    - `RemotionDesktop.dmg` (macOS arm64 only)
    - `RemotionDesktop.exe` (Windows x64)
 
