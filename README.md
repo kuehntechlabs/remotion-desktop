@@ -10,6 +10,14 @@
 </p>
 
 <p align="center">
+  <a href="./public/view.gif">View demo GIF</a>
+</p>
+
+<p align="center">
+  <img src="./public/view.gif" alt="Remotion Desktop demo" width="900" />
+</p>
+
+<p align="center">
   <a href="#features">Features</a> &middot;
   <a href="#installation">Installation</a> &middot;
   <a href="#development">Development</a> &middot;
