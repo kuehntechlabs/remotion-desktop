@@ -15,6 +15,19 @@ export interface Project {
   devPort: number | null;
 }
 
+export interface UpdaterActionResult {
+  ok: boolean;
+  message?: string;
+}
+
+export type UpdaterEvent =
+  | { type: "checking-for-update" }
+  | { type: "update-available"; version: string }
+  | { type: "update-not-available" }
+  | { type: "download-progress"; percent: number }
+  | { type: "update-downloaded"; version: string }
+  | { type: "error"; message: string };
+
 const api = {
   // Projects
   getProjects: (): Promise<Project[]> => ipcRenderer.invoke("get-projects"),
@@ -42,7 +55,7 @@ const api = {
     ipcRenderer.invoke("get-asset-data-url", filePath),
 
   // Remotion
-  scaffoldProject: (parentDir: string, projectName: string): Promise<void> =>
+  scaffoldProject: (parentDir: string, projectName: string): Promise<string> =>
     ipcRenderer.invoke("scaffold-project", parentDir, projectName),
   installDependencies: (path: string): Promise<void> =>
     ipcRenderer.invoke("install-dependencies", path),
@@ -65,6 +78,13 @@ const api = {
   readFileText: (filePath: string): Promise<string | null> =>
     ipcRenderer.invoke("read-file-text", filePath),
   getPlatform: (): Promise<string> => ipcRenderer.invoke("get-platform"),
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke("get-app-version"),
+  checkForUpdates: (): Promise<UpdaterActionResult> =>
+    ipcRenderer.invoke("check-for-updates"),
+  downloadUpdate: (): Promise<UpdaterActionResult> =>
+    ipcRenderer.invoke("download-update"),
+  quitAndInstallUpdate: (): Promise<UpdaterActionResult> =>
+    ipcRenderer.invoke("quit-and-install-update"),
 
   // Directory watching
   watchDirectory: (dirPath: string, label: string): Promise<void> =>
@@ -87,6 +107,14 @@ const api = {
     ) => callback(dirPath, label);
     ipcRenderer.on("directory-changed", handler);
     return () => ipcRenderer.removeListener("directory-changed", handler);
+  },
+  onUpdaterEvent: (callback: (payload: UpdaterEvent) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: UpdaterEvent,
+    ) => callback(payload);
+    ipcRenderer.on("updater-event", handler);
+    return () => ipcRenderer.removeListener("updater-event", handler);
   },
 };
 

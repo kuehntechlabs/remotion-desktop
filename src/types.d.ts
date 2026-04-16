@@ -13,6 +13,19 @@ export interface Project {
   devPort: number | null;
 }
 
+export interface UpdaterActionResult {
+  ok: boolean;
+  message?: string;
+}
+
+export type UpdaterEvent =
+  | { type: "checking-for-update" }
+  | { type: "update-available"; version: string }
+  | { type: "update-not-available" }
+  | { type: "download-progress"; percent: number }
+  | { type: "update-downloaded"; version: string }
+  | { type: "error"; message: string };
+
 interface RemotionAPI {
   getProjects(): Promise<Project[]>;
   createProject(name: string, path: string): Promise<Project>;
@@ -27,7 +40,7 @@ interface RemotionAPI {
   getRenders(projectPath: string): Promise<Asset[]>;
   deleteAsset(projectPath: string, filename: string): Promise<void>;
   getAssetDataUrl(filePath: string): Promise<string | null>;
-  scaffoldProject(parentDir: string, projectName: string): Promise<void>;
+  scaffoldProject(parentDir: string, projectName: string): Promise<string>;
   installDependencies(path: string): Promise<void>;
   startDevServer(projectPath: string): Promise<number>;
   stopDevServer(projectPath: string): Promise<void>;
@@ -39,12 +52,17 @@ interface RemotionAPI {
   openWithSystem(filePath: string): Promise<string>;
   readFileText(filePath: string): Promise<string | null>;
   getPlatform(): Promise<string>;
+  getAppVersion(): Promise<string>;
+  checkForUpdates(): Promise<UpdaterActionResult>;
+  downloadUpdate(): Promise<UpdaterActionResult>;
+  quitAndInstallUpdate(): Promise<UpdaterActionResult>;
   watchDirectory(dirPath: string, label: string): Promise<void>;
   unwatchDirectory(dirPath: string): Promise<void>;
   onDevServerStopped(callback: (projectPath: string) => void): () => void;
   onDirectoryChanged(
     callback: (dirPath: string, label: string) => void,
   ): () => void;
+  onUpdaterEvent(callback: (payload: UpdaterEvent) => void): () => void;
 }
 
 declare global {

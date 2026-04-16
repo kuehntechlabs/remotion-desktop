@@ -101,13 +101,14 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
     setScaffolding(true);
     setError(null);
 
-    const projectPath = `${folder}/${name.trim()}`;
-
     try {
       setScaffoldStatus(
         "Remotion-Projekt wird eingerichtet (kann eine Minute dauern)...",
       );
-      await window.remotion.scaffoldProject(folder, name.trim());
+      const projectPath = await window.remotion.scaffoldProject(
+        folder,
+        name.trim(),
+      );
 
       setScaffoldStatus("Abhängigkeiten werden installiert...");
       await window.remotion.installDependencies(projectPath);
@@ -212,8 +213,9 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
               <CardHeader>
                 <CardTitle className="text-lg">Speicherort</CardTitle>
                 <CardDescription>
-                  Wähle den übergeordneten Ordner. Dein Projekt wird als
-                  Unterordner "{name.trim()}" darin erstellt.
+                  Waehle den uebergeordneten Ordner. Der Projektordner wird aus
+                  dem Namen erzeugt (Leerzeichen werden automatisch durch
+                  Bindestriche ersetzt).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

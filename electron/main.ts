@@ -7,6 +7,7 @@ import {
   protocol,
   net,
 } from "electron";
+import { autoUpdater } from "electron-updater";
 import path from "path";
 import fs from "fs";
 import { ChildProcess, spawn, exec } from "child_process";
@@ -26,6 +27,19 @@ interface AppConfig {
   projects: Project[];
   lastOpenedProject: string | null;
 }
+
+interface UpdaterActionResult {
+  ok: boolean;
+  message?: string;
+}
+
+type UpdaterEventPayload =
+  | { type: "checking-for-update" }
+  | { type: "update-available"; version: string }
+  | { type: "update-not-available" }
+  | { type: "download-progress"; percent: number }
+  | { type: "update-downloaded"; version: string }
+  | { type: "error"; message: string };
 
 // Config management
 const CONFIG_DIR = path.join(app.getPath("home"), ".remotion-project");
@@ -55,6 +69,9 @@ function writeConfig(config: AppConfig) {
 // Dev server process tracking
 const devServers: Map<string, ChildProcess> = new Map();
 
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+
 // Directory watchers
 const dirWatchers: Map<string, fs.FSWatcher> = new Map();
 
@@ -77,6 +94,46 @@ function findFreePort(): Promise<number> {
 
 // Main window
 let mainWindow: BrowserWindow | null = null;
+
+function sendUpdaterEvent(payload: UpdaterEventPayload) {
+  mainWindow?.webContents.send("updater-event", payload);
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("checking-for-update", () => {
+    sendUpdaterEvent({ type: "checking-for-update" });
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    sendUpdaterEvent({ type: "update-available", version: info.version });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    sendUpdaterEvent({ type: "update-not-available" });
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    sendUpdaterEvent({
+      type: "download-progress",
+      percent: progress.percent,
+    });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    sendUpdaterEvent({ type: "update-downloaded", version: info.version });
+  });
+
+  autoUpdater.on("error", (error) => {
+    sendUpdaterEvent({
+      type: "error",
+      message:
+        error instanceof Error ? error.message : "Unknown updater error",
+    });
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -190,6 +247,19 @@ function classifyFile(ext: string): "image" | "video" | "audio" | "other" {
   return "other";
 }
 
+function toSafeProjectDirName(projectName: string): string {
+  const sanitized = projectName
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9@._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[._-]+|[._-]+$/g, "");
+
+  return sanitized || "remotion-project";
+}
+
 function scanDirectory(
   dir: string,
   prefix: string,
@@ -263,20 +333,21 @@ ipcMain.handle("get-asset-data-url", (_event, filePath: string) => {
 ipcMain.handle(
   "scaffold-project",
   (_event, parentDir: string, projectName: string) => {
-    return new Promise<void>((resolve, reject) => {
-      const projectPath = path.join(parentDir, projectName);
+    return new Promise<string>((resolve, reject) => {
+      const safeDirName = toSafeProjectDirName(projectName);
+      const projectPath = path.join(parentDir, safeDirName);
 
       if (fs.existsSync(projectPath)) {
         reject(
           new Error(
-            `Der Ordner "${projectPath}" existiert bereits. Bitte wähle einen anderen Namen.`,
+            `Der Ordner "${projectPath}" existiert bereits. Bitte waehle einen anderen Namen.`,
           ),
         );
         return;
       }
 
       const child = spawn(
-        "npx",
+        npxCommand,
         [
           "create-video@latest",
           "--yes",
@@ -285,7 +356,6 @@ ipcMain.handle(
           projectPath,
         ],
         {
-          shell: true,
           stdio: "pipe",
           env: { ...process.env },
         },
@@ -298,7 +368,15 @@ ipcMain.handle(
 
       child.on("close", (code) => {
         if (code === 0) {
-          resolve();
+          if (!fs.existsSync(projectPath)) {
+            reject(
+              new Error(
+                `Projektordner wurde nicht gefunden: ${projectPath}. Bitte pruefe den Projektnamen.`,
+              ),
+            );
+            return;
+          }
+          resolve(projectPath);
         } else {
           reject(
             new Error(`Scaffold fehlgeschlagen (Code ${code}): ${stderr}`),
@@ -306,26 +384,57 @@ ipcMain.handle(
         }
       });
 
-      child.on("error", reject);
+      child.on("error", (error) => {
+        reject(
+          new Error(
+            `Scaffold konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+      });
     });
   },
 );
 
 ipcMain.handle("install-dependencies", (_event, projectPath: string) => {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn("npm", ["install"], {
+    if (!fs.existsSync(projectPath)) {
+      reject(new Error(`Projektordner nicht gefunden: ${projectPath}`));
+      return;
+    }
+
+    const packageJsonPath = path.join(projectPath, "package.json");
+    if (!fs.existsSync(packageJsonPath)) {
+      reject(
+        new Error(
+          `Kein package.json im Projektordner gefunden: ${projectPath}`,
+        ),
+      );
+      return;
+    }
+
+    const child = spawn(npmCommand, ["install"], {
       cwd: projectPath,
-      shell: true,
       stdio: "pipe",
       env: { ...process.env },
     });
 
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`npm install failed with code ${code}`));
+    let stderr = "";
+    child.stderr?.on("data", (data) => {
+      stderr += data.toString();
     });
 
-    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`npm install failed with code ${code}: ${stderr}`));
+    });
+
+    child.on("error", (error) => {
+      reject(
+        new Error(
+          `npm install konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    });
   });
 });
 
@@ -366,11 +475,10 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
   const port = await findFreePort();
 
   const child = spawn(
-    "npm",
+    npmCommand,
     ["run", "dev", "--", "--port", String(port), "--no-open"],
     {
       cwd: projectPath,
-      shell: true,
       stdio: "pipe",
       env: { ...process.env, BROWSER: "none" },
     },
@@ -440,6 +548,62 @@ ipcMain.handle("get-platform", () => {
   return process.platform;
 });
 
+ipcMain.handle("get-app-version", () => {
+  return app.getVersion();
+});
+
+ipcMain.handle("check-for-updates", async (): Promise<UpdaterActionResult> => {
+  if (!app.isPackaged) {
+    const message = "Updates are only available in packaged builds.";
+    sendUpdaterEvent({ type: "error", message });
+    return { ok: false, message };
+  }
+
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to check for updates";
+    sendUpdaterEvent({ type: "error", message });
+    return { ok: false, message };
+  }
+});
+
+ipcMain.handle("download-update", async (): Promise<UpdaterActionResult> => {
+  if (!app.isPackaged) {
+    const message = "Updates are only available in packaged builds.";
+    sendUpdaterEvent({ type: "error", message });
+    return { ok: false, message };
+  }
+
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to download update";
+    sendUpdaterEvent({ type: "error", message });
+    return { ok: false, message };
+  }
+});
+
+ipcMain.handle(
+  "quit-and-install-update",
+  (): UpdaterActionResult => {
+    if (!app.isPackaged) {
+      const message = "Updates are only available in packaged builds.";
+      sendUpdaterEvent({ type: "error", message });
+      return { ok: false, message };
+    }
+
+    setImmediate(() => {
+      autoUpdater.quitAndInstall();
+    });
+    return { ok: true };
+  },
+);
+
 // Get rendered output files from out/ directory (recursive)
 ipcMain.handle("get-renders", (_event, projectPath: string) => {
   return scanDirectory(path.join(projectPath, "out"), "");
@@ -503,6 +667,7 @@ app.whenReady().then(() => {
     return net.fetch(`file://${filePath}`);
   });
 
+  setupAutoUpdater();
   createWindow();
 });
 

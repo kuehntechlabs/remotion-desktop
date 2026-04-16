@@ -2,6 +2,11 @@
   "name": "remotion-desktop",
   "version": "1.1.0",
   "description": "Desktop app to manage Remotion video projects",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kuehntechlabs/remotion-desktop.git"
+  },
+  "license": "MIT",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -9,6 +14,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "uuid": "^13.0.0"
@@ -16,7 +22,7 @@
   "devDependencies": {
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-"@vitejs/plugin-react": "^4.5.0",
+    "@vitejs/plugin-react": "^4.5.0",
     "autoprefixer": "^10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -35,15 +41,44 @@
   "build": {
     "appId": "com.remotion.desktop",
     "productName": "Remotion Desktop",
-    "mac": {
-      "target": "dmg"
-    },
-    "win": {
-      "target": "nsis"
-    },
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "RemotionDesktop.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "RemotionDesktop.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kuehntechlabs",
+        "repo": "remotion-desktop"
+      }
     ]
   }
 }
