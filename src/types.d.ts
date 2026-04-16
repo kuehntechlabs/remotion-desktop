@@ -18,6 +18,12 @@ export interface UpdaterActionResult {
   message?: string;
 }
 
+export interface ProjectTargetCheck {
+  safeDirName: string;
+  projectPath: string;
+  exists: boolean;
+}
+
 export type UpdaterEvent =
   | { type: "checking-for-update" }
   | { type: "update-available"; version: string }
@@ -41,6 +47,10 @@ interface RemotionAPI {
   deleteAsset(projectPath: string, filename: string): Promise<void>;
   getAssetDataUrl(filePath: string): Promise<string | null>;
   scaffoldProject(parentDir: string, projectName: string): Promise<string>;
+  checkProjectTarget(
+    parentDir: string,
+    projectName: string,
+  ): Promise<ProjectTargetCheck>;
   installDependencies(path: string): Promise<void>;
   startDevServer(projectPath: string): Promise<number>;
   stopDevServer(projectPath: string): Promise<void>;

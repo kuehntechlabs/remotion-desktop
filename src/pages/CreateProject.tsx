@@ -50,6 +50,11 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
   const [scaffolding, setScaffolding] = useState(false);
   const [scaffoldStatus, setScaffoldStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [targetPath, setTargetPath] = useState<string | null>(null);
+  const [targetDirName, setTargetDirName] = useState("");
+  const [targetExists, setTargetExists] = useState(false);
+  const [checkingTarget, setCheckingTarget] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
 
   // Load thumbnails for image/video files
   useEffect(() => {
@@ -68,11 +73,55 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
     loadThumbnails();
   }, [files]);
 
+  useEffect(() => {
+    if (!folder || !name.trim()) {
+      setTargetPath(null);
+      setTargetDirName("");
+      setTargetExists(false);
+      setTargetError(null);
+      setCheckingTarget(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingTarget(true);
+    setTargetError(null);
+
+    window.remotion
+      .checkProjectTarget(folder, name.trim())
+      .then((result) => {
+        if (cancelled) return;
+        setTargetPath(result.projectPath);
+        setTargetDirName(result.safeDirName);
+        setTargetExists(result.exists);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTargetPath(null);
+        setTargetDirName("");
+        setTargetExists(false);
+        setTargetError(
+          err instanceof Error
+            ? err.message
+            : "Projektordner konnte nicht geprueft werden",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCheckingTarget(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [folder, name]);
+
   async function handlePickFolder() {
     const selected = await window.remotion.pickFolder();
     if (selected) {
       setFolder(selected);
-      setStep("assets");
+      setTargetError(null);
     }
   }
 
@@ -97,11 +146,23 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
 
   async function handleScaffold() {
     if (!folder || !name.trim()) return;
-    setStep("scaffolding");
-    setScaffolding(true);
     setError(null);
+    setTargetError(null);
 
     try {
+      const target = await window.remotion.checkProjectTarget(folder, name.trim());
+      setTargetPath(target.projectPath);
+      setTargetDirName(target.safeDirName);
+      setTargetExists(target.exists);
+
+      if (target.exists) {
+        setStep("folder");
+        return;
+      }
+
+      setStep("scaffolding");
+      setScaffolding(true);
+
       setScaffoldStatus(
         "Remotion-Projekt wird eingerichtet (kann eine Minute dauern)...",
       );
@@ -239,8 +300,51 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
                   >
                     <FolderOpen className="h-6 w-6 mr-3" />
                     Ordner auswählen
-                  </Button>
+                    </Button>
                 )}
+
+                {folder && targetPath && (
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Projektordner
+                    </p>
+                    <p className="text-sm font-mono break-all">{targetPath}</p>
+                  </div>
+                )}
+
+                {folder && checkingTarget && (
+                  <p className="text-sm text-muted-foreground">
+                    Projektordner wird geprueft...
+                  </p>
+                )}
+
+                {folder && !checkingTarget && targetExists && (
+                  <p className="text-sm text-destructive">
+                    Der Ordner "{targetDirName}" existiert bereits. Bitte
+                    waehle einen anderen Namen oder einen anderen Speicherort.
+                  </p>
+                )}
+
+                {folder && !checkingTarget && targetError && (
+                  <p className="text-sm text-destructive">{targetError}</p>
+                )}
+
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setStep("name")}>
+                    Zurueck
+                  </Button>
+                  <Button
+                    onClick={() => setStep("assets")}
+                    disabled={
+                      !folder ||
+                      checkingTarget ||
+                      targetExists ||
+                      Boolean(targetError)
+                    }
+                  >
+                    Weiter
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -376,6 +480,9 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
                   })()}
 
                 <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setStep("folder")}>
+                    Zurueck
+                  </Button>
                   <Button onClick={handleScaffold}>
                     {files.length > 0
                       ? "Projekt erstellen"
@@ -415,9 +522,9 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => setStep("assets")}
+                        onClick={() => setStep("folder")}
                       >
-                        Zurück
+                        Zum Speicherort
                       </Button>
                       <Button onClick={handleScaffold}>Erneut versuchen</Button>
                     </div>

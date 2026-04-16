@@ -20,6 +20,12 @@ export interface UpdaterActionResult {
   message?: string;
 }
 
+export interface ProjectTargetCheck {
+  safeDirName: string;
+  projectPath: string;
+  exists: boolean;
+}
+
 export type UpdaterEvent =
   | { type: "checking-for-update" }
   | { type: "update-available"; version: string }
@@ -57,6 +63,11 @@ const api = {
   // Remotion
   scaffoldProject: (parentDir: string, projectName: string): Promise<string> =>
     ipcRenderer.invoke("scaffold-project", parentDir, projectName),
+  checkProjectTarget: (
+    parentDir: string,
+    projectName: string,
+  ): Promise<ProjectTargetCheck> =>
+    ipcRenderer.invoke("check-project-target", parentDir, projectName),
   installDependencies: (path: string): Promise<void> =>
     ipcRenderer.invoke("install-dependencies", path),
   startDevServer: (projectPath: string): Promise<number> =>

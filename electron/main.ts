@@ -33,6 +33,12 @@ interface UpdaterActionResult {
   message?: string;
 }
 
+interface ProjectTargetCheck {
+  safeDirName: string;
+  projectPath: string;
+  exists: boolean;
+}
+
 type UpdaterEventPayload =
   | { type: "checking-for-update" }
   | { type: "update-available"; version: string }
@@ -438,6 +444,19 @@ ipcMain.handle(
         );
       });
     });
+  },
+);
+
+ipcMain.handle(
+  "check-project-target",
+  (_event, parentDir: string, projectName: string): ProjectTargetCheck => {
+    const safeDirName = toSafeProjectDirName(projectName);
+    const projectPath = path.join(parentDir, safeDirName);
+    return {
+      safeDirName,
+      projectPath,
+      exists: fs.existsSync(projectPath),
+    };
   },
 );
 
