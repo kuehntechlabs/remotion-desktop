@@ -123,12 +123,12 @@ export default function App() {
             <h3 className="text-lg font-semibold">
               {updateDialogState === "downloaded"
                 ? "Update bereit"
-                : "Neue Version verfuegbar"}
+                : "Neue Version verfügbar"}
             </h3>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
               {updateDialogState === "downloaded"
                 ? `Version ${latestVersion || "-"} wurde geladen.`
-                : `Version ${latestVersion || "-"} ist verfuegbar (aktuell ${appVersion || "-"}).`}
+                : `Version ${latestVersion || "-"} ist verfügbar (aktuell ${appVersion || "-"}).`}
             </p>
 
             {updateDialogState === "downloading" && (
@@ -153,7 +153,7 @@ export default function App() {
 
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="outline" onClick={handleUpdateLater}>
-                Spaeter
+                Später
               </Button>
 
               {updateDialogState === "available" && (

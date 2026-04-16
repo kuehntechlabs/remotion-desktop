@@ -103,7 +103,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
         setTargetError(
           err instanceof Error
             ? err.message
-            : "Projektordner konnte nicht geprueft werden",
+            : "Projektordner konnte nicht geprüft werden",
         );
       })
       .finally(() => {
@@ -171,7 +171,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
         name.trim(),
       );
 
-      setScaffoldStatus("Abhaengigkeiten und Integrationen werden installiert...");
+      setScaffoldStatus("Abhängigkeiten und Integrationen werden installiert...");
       await window.remotion.installDependencies(projectPath);
 
       // Copy assets after scaffolding so they land in public/
@@ -274,7 +274,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
               <CardHeader>
                 <CardTitle className="text-lg">Speicherort</CardTitle>
                 <CardDescription>
-                  Waehle den uebergeordneten Ordner. Der Projektordner wird aus
+                  Wähle den übergeordneten Ordner. Der Projektordner wird aus
                   dem Namen erzeugt (Leerzeichen werden automatisch durch
                   Bindestriche ersetzt).
                 </CardDescription>
@@ -314,14 +314,14 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
 
                 {folder && checkingTarget && (
                   <p className="text-sm text-muted-foreground">
-                    Projektordner wird geprueft...
+                    Projektordner wird geprüft...
                   </p>
                 )}
 
                 {folder && !checkingTarget && targetExists && (
                   <p className="text-sm text-destructive">
                     Der Ordner "{targetDirName}" existiert bereits. Bitte
-                    waehle einen anderen Namen oder einen anderen Speicherort.
+                    wähle einen anderen Namen oder einen anderen Speicherort.
                   </p>
                 )}
 
@@ -331,7 +331,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
 
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setStep("name")}>
-                    Zurueck
+                    Zurück
                   </Button>
                   <Button
                     onClick={() => setStep("assets")}
@@ -481,7 +481,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
 
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setStep("folder")}>
-                    Zurueck
+                    Zurück
                   </Button>
                   <Button onClick={handleScaffold}>
                     {files.length > 0

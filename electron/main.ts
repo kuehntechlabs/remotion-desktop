@@ -392,7 +392,7 @@ ipcMain.handle(
       if (fs.existsSync(projectPath)) {
         reject(
           new Error(
-            `Der Ordner "${projectPath}" existiert bereits. Bitte waehle einen anderen Namen.`,
+            `Der Ordner "${projectPath}" existiert bereits. Bitte wähle einen anderen Namen.`,
           ),
         );
         return;
@@ -423,7 +423,7 @@ ipcMain.handle(
           if (!fs.existsSync(projectPath)) {
             reject(
               new Error(
-                `Projektordner wurde nicht gefunden: ${projectPath}. Bitte pruefe den Projektnamen.`,
+                `Projektordner wurde nicht gefunden: ${projectPath}. Bitte prüfe den Projektnamen.`,
               ),
             );
             return;
