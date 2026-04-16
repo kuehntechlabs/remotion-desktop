@@ -1,7 +1,7 @@
 <h1 align="center">Remotion Desktop</h1>
 
 <p align="center">
-  A desktop workspace for <a href="https://www.remotion.pro/">Remotion</a> projects.<br/>
+  A desktop workspace for <a href="https://www.remotion.dev/">Remotion</a> projects.<br/>
   Create projects, manage assets, and preview renders from one app.
 </p>
 
@@ -30,6 +30,8 @@ Create and manage multiple Remotion projects from one dashboard. Each project is
 ### Project Scaffolding
 
 Scaffold a new Remotion project directly from the app with `npx create-video@latest`, install dependencies automatically, and optionally seed the new project with media files.
+
+New projects also preinstall common integrations: `mapbox-gl`, `@turf/turf`, `@types/mapbox-gl`, `@remotion/animated-emoji`, `@remotion/animation-utils`, `@remotion/gif`, `@remotion/fonts`, and `@remotion/google-fonts`.
 
 ### Embedded Live Preview
 

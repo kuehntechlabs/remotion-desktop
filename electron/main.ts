@@ -72,6 +72,17 @@ const devServers: Map<string, ChildProcess> = new Map();
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 
+const defaultScaffoldPackages = [
+  "mapbox-gl",
+  "@turf/turf",
+  "@types/mapbox-gl",
+  "@remotion/animated-emoji",
+  "@remotion/animation-utils",
+  "@remotion/gif",
+  "@remotion/fonts",
+  "@remotion/google-fonts",
+];
+
 // Directory watchers
 const dirWatchers: Map<string, fs.FSWatcher> = new Map();
 
@@ -260,6 +271,41 @@ function toSafeProjectDirName(projectName: string): string {
   return sanitized || "remotion-project";
 }
 
+function runNpmCommand(
+  projectPath: string,
+  args: string[],
+  commandLabel: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(npmCommand, args, {
+      cwd: projectPath,
+      stdio: "pipe",
+      env: { ...process.env },
+    });
+
+    let stderr = "";
+    child.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${commandLabel} failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    child.on("error", (error) => {
+      reject(
+        new Error(
+          `${commandLabel} konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    });
+  });
+}
+
 function scanDirectory(
   dir: string,
   prefix: string,
@@ -395,47 +441,23 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle("install-dependencies", (_event, projectPath: string) => {
-  return new Promise<void>((resolve, reject) => {
-    if (!fs.existsSync(projectPath)) {
-      reject(new Error(`Projektordner nicht gefunden: ${projectPath}`));
-      return;
-    }
+ipcMain.handle("install-dependencies", async (_event, projectPath: string) => {
+  if (!fs.existsSync(projectPath)) {
+    throw new Error(`Projektordner nicht gefunden: ${projectPath}`);
+  }
 
-    const packageJsonPath = path.join(projectPath, "package.json");
-    if (!fs.existsSync(packageJsonPath)) {
-      reject(
-        new Error(
-          `Kein package.json im Projektordner gefunden: ${projectPath}`,
-        ),
-      );
-      return;
-    }
+  const packageJsonPath = path.join(projectPath, "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(`Kein package.json im Projektordner gefunden: ${projectPath}`);
+  }
 
-    const child = spawn(npmCommand, ["install"], {
-      cwd: projectPath,
-      stdio: "pipe",
-      env: { ...process.env },
-    });
+  await runNpmCommand(projectPath, ["install"], "npm install");
 
-    let stderr = "";
-    child.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`npm install failed with code ${code}: ${stderr}`));
-    });
-
-    child.on("error", (error) => {
-      reject(
-        new Error(
-          `npm install konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-      );
-    });
-  });
+  await runNpmCommand(
+    projectPath,
+    ["install", "--save-exact", ...defaultScaffoldPackages],
+    "npm install --save-exact (Integrationen)",
+  );
 });
 
 // Wait until a port is accepting connections

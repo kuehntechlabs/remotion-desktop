@@ -110,7 +110,7 @@ export default function CreateProject({ onBack, onProjectCreated }: Props) {
         name.trim(),
       );
 
-      setScaffoldStatus("Abhängigkeiten werden installiert...");
+      setScaffoldStatus("Abhaengigkeiten und Integrationen werden installiert...");
       await window.remotion.installDependencies(projectPath);
 
       // Copy assets after scaffolding so they land in public/
