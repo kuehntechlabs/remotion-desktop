@@ -89,6 +89,32 @@ const defaultScaffoldPackages = [
   "@remotion/google-fonts",
 ];
 
+function resolveDockIconPath(): string | null {
+  const candidates = [
+    path.join(__dirname, "../build/icon.png"),
+    path.join(process.cwd(), "build/icon.png"),
+    path.join(__dirname, "../public/icons/icon-512.png"),
+    path.join(process.cwd(), "public/icons/icon-512.png"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function applyDockIcon() {
+  if (process.platform !== "darwin") return;
+
+  const iconPath = resolveDockIconPath();
+  if (!iconPath) return;
+
+  app.dock?.setIcon(iconPath);
+}
+
 // Directory watchers
 const dirWatchers: Map<string, fs.FSWatcher> = new Map();
 
@@ -709,6 +735,7 @@ app.whenReady().then(() => {
   });
 
   setupAutoUpdater();
+  applyDockIcon();
   createWindow();
 });
 

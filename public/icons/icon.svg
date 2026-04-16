@@ -1,0 +1,20 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1024 1024"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Remotion Desktop Icon</title>
+  <desc id="desc">Minimal rounded-square icon with a geometric letter R.</desc>
+
+  <rect width="1024" height="1024" rx="224" fill="#0f172a" />
+
+  <path
+    d="M328 224V800M328 224H560C652 224 724 296 724 388C724 480 652 552 560 552H328M560 552L724 800"
+    fill="none"
+    stroke="#f8fafc"
+    stroke-width="112"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

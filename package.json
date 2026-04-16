@@ -60,6 +60,7 @@
           ]
         }
       ],
+      "icon": "build/icon.icns",
       "artifactName": "RemotionDesktop.${ext}"
     },
     "win": {
@@ -71,6 +72,7 @@
           ]
         }
       ],
+      "icon": "build/icon.ico",
       "artifactName": "RemotionDesktop.${ext}"
     },
     "publish": [
