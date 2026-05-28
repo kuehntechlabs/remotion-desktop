@@ -8,9 +8,37 @@ import {
 import { autoUpdater } from "electron-updater";
 import path from "path";
 import fs from "fs";
-import { ChildProcess, spawn, exec } from "child_process";
+import { ChildProcess, spawn, exec, execSync } from "child_process";
 import { v4 as uuidv4 } from "uuid";
 import netModule from "net";
+
+// macOS / Linux GUI launches inherit a minimal PATH from launchd, missing
+// Homebrew, nvm, fnm, asdf etc. Spawn the user's login shell and copy its
+// PATH into our env so child processes can find npm/npx/node.
+function fixPath() {
+  if (process.platform === "win32") return;
+
+  const shell = process.env.SHELL || "/bin/zsh";
+  const delim = "__REMOTION_PATH_DELIM__";
+
+  try {
+    const stdout = execSync(
+      `${shell} -ilc 'echo -n ${delim}; printenv PATH; echo -n ${delim}'`,
+      { encoding: "utf-8", timeout: 5000 },
+    );
+    const parts = stdout.split(delim);
+    if (parts.length >= 3) {
+      const userPath = parts[1].trim();
+      if (userPath) {
+        process.env.PATH = userPath;
+      }
+    }
+  } catch {
+    // Best effort — keep whatever PATH we had.
+  }
+}
+
+fixPath();
 
 // Types
 interface Project {
@@ -571,6 +599,18 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
 
   devServers.set(projectPath, child);
 
+  const startupError = new Promise<never>((_resolve, reject) => {
+    child.once("error", (error) => {
+      devServers.delete(projectPath);
+      devServerPorts.delete(projectPath);
+      const message =
+        error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "npm wurde nicht gefunden. Bitte installiere Node.js (https://nodejs.org) und starte die App neu."
+          : `Dev-Server konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`;
+      reject(new Error(message));
+    });
+  });
+
   child.on("close", () => {
     devServers.delete(projectPath);
     devServerPorts.delete(projectPath);
@@ -578,7 +618,7 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
   });
 
   // Wait for the server to actually be ready before returning
-  await waitForPort(port);
+  await Promise.race([waitForPort(port), startupError]);
 
   devServerPorts.set(projectPath, port);
   return port;
