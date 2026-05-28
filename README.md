@@ -23,6 +23,7 @@
   <a href="#development">Development</a> &middot;
   <a href="#updates">Updates</a> &middot;
   <a href="#release-workflow">Release Workflow</a> &middot;
+  <a href="#code-signing">Code Signing</a> &middot;
   <a href="#architecture">Architecture</a> &middot;
   <a href="#license">License</a>
 </p>
@@ -126,6 +127,30 @@ GitHub Actions is configured to release from tags and automate tagging on `main`
 3. Workflow `Release Build` is triggered automatically for that tag and publishes:
    - `RemotionDesktop.dmg` (macOS arm64 only)
    - `RemotionDesktop.exe` (Windows x64)
+
+Builds are signed automatically when the required credentials are configured
+(see [Code Signing](#code-signing)). Otherwise the release ships unsigned.
+
+---
+
+## Code Signing
+
+Production releases are signed per platform:
+
+- **macOS** — Apple Developer ID Application + notarisation via notarytool
+- **Windows** — Azure Trusted Signing (Public Trust)
+
+Signing is opt-in by credential: if the relevant env vars / GitHub secrets are
+present, signing turns on automatically; if not, the build produces an
+unsigned artifact. This lets the same pipeline serve both ad-hoc testing and
+production releases.
+
+See [`docs/SIGNING.md`](./docs/SIGNING.md) for the full setup runbook
+(certificate provisioning, Apple Developer enrolment, Azure Trusted Signing
+account, GitHub secrets, troubleshooting).
+
+For a local signed build, copy `.env.example` to `.env`, fill in the
+credentials you have, and run `npm run build`.
 
 ---
 
