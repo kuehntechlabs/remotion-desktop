@@ -16,8 +16,16 @@ const AZURE_ACCOUNT_NAME = process.env.AZURE_CODE_SIGNING_ACCOUNT_NAME || "digit
 const AZURE_CERT_PROFILE = process.env.AZURE_CERT_PROFILE_NAME || "remotion-desktop";
 const AZURE_ENDPOINT = process.env.AZURE_CODE_SIGNING_ENDPOINT || "https://weu.codesigning.azure.net/";
 
+// Two ways to enable mac signing:
+//   1. CSC_LINK + CSC_KEY_PASSWORD — point at a .p12 (used in CI from base64
+//      secret; electron-builder imports into a temp keychain)
+//   2. CSC_NAME — identity name already present in the user's login keychain
+//      (used locally on macOS 26+, where temp-keychain imports split cert and
+//      key across file-based and data-protection keychains and find-identity
+//      can no longer resolve them)
 const hasAppleSigning = Boolean(
-  process.env.CSC_LINK && process.env.CSC_KEY_PASSWORD,
+  (process.env.CSC_LINK && process.env.CSC_KEY_PASSWORD) ||
+    process.env.CSC_NAME,
 );
 const hasAppleNotarization = Boolean(
   process.env.APPLE_ID &&
@@ -64,10 +72,12 @@ if (hasAzureSigning) {
 }
 
 if (!hasAppleSigning) {
-  console.log("[electron-builder] macOS: building unsigned (no CSC_LINK)");
+  console.log(
+    "[electron-builder] macOS: building unsigned (no CSC_LINK and no CSC_NAME)",
+  );
 } else if (!hasAppleNotarization) {
   console.log(
-    "[electron-builder] macOS: signing without notarisation (APPLE_ID missing)",
+    "[electron-builder] macOS: signing without notarisation (APPLE_APP_SPECIFIC_PASSWORD missing)",
   );
 } else {
   console.log("[electron-builder] macOS: signed + notarised");
