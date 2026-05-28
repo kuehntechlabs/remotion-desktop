@@ -4,8 +4,6 @@ import {
   ipcMain,
   dialog,
   shell,
-  protocol,
-  net,
 } from "electron";
 import { autoUpdater } from "electron-updater";
 import path from "path";
@@ -20,7 +18,6 @@ interface Project {
   name: string;
   path: string;
   createdAt: string;
-  devPort: number | null;
 }
 
 interface AppConfig {
@@ -74,9 +71,21 @@ function writeConfig(config: AppConfig) {
 
 // Dev server process tracking
 const devServers: Map<string, ChildProcess> = new Map();
+const devServerPorts: Map<string, number> = new Map();
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+
+// On Windows, child.kill() does not reliably terminate npm's grandchildren
+// (the actual node / remotion processes), leaving the dev-server port stuck.
+// taskkill /T walks the process tree.
+function killDevServerProcess(child: ChildProcess) {
+  if (process.platform === "win32" && child.pid !== undefined) {
+    exec(`taskkill /pid ${child.pid} /t /f`);
+  } else {
+    child.kill();
+  }
+}
 
 const defaultScaffoldPackages = [
   "mapbox-gl",
@@ -118,11 +127,11 @@ function applyDockIcon() {
 // Directory watchers
 const dirWatchers: Map<string, fs.FSWatcher> = new Map();
 
-// Find a free port
+// Find a free port (probe on loopback only to match where the dev server binds)
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = netModule.createServer();
-    server.listen(0, () => {
+    server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       if (addr && typeof addr === "object") {
         const port = addr.port;
@@ -217,7 +226,6 @@ ipcMain.handle(
       name,
       path: projectPath,
       createdAt: new Date().toISOString(),
-      devPort: null,
     };
     config.projects.push(project);
     config.lastOpenedProject = project.id;
@@ -535,15 +543,25 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
   // Kill existing if running
   const existing = devServers.get(projectPath);
   if (existing) {
-    existing.kill();
+    killDevServerProcess(existing);
     devServers.delete(projectPath);
+    devServerPorts.delete(projectPath);
   }
 
   const port = await findFreePort();
 
   const child = spawn(
     npmCommand,
-    ["run", "dev", "--", "--port", String(port), "--no-open"],
+    [
+      "run",
+      "dev",
+      "--",
+      "--port",
+      String(port),
+      "--host",
+      "127.0.0.1",
+      "--no-open",
+    ],
     {
       cwd: projectPath,
       stdio: "pipe",
@@ -555,45 +573,31 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
 
   child.on("close", () => {
     devServers.delete(projectPath);
+    devServerPorts.delete(projectPath);
     mainWindow?.webContents.send("dev-server-stopped", projectPath);
   });
 
   // Wait for the server to actually be ready before returning
   await waitForPort(port);
 
-  // Update config with port
-  const config = readConfig();
-  const project = config.projects.find((p) => p.path === projectPath);
-  if (project) {
-    project.devPort = port;
-    writeConfig(config);
-  }
-
+  devServerPorts.set(projectPath, port);
   return port;
 });
 
 ipcMain.handle("stop-dev-server", (_event, projectPath: string) => {
   const child = devServers.get(projectPath);
   if (child) {
-    child.kill();
+    killDevServerProcess(child);
     devServers.delete(projectPath);
-  }
-
-  const config = readConfig();
-  const project = config.projects.find((p) => p.path === projectPath);
-  if (project) {
-    project.devPort = null;
-    writeConfig(config);
+    devServerPorts.delete(projectPath);
   }
 });
 
 ipcMain.handle("get-dev-server-status", (_event, projectPath: string) => {
   const isRunning = devServers.has(projectPath);
-  const config = readConfig();
-  const project = config.projects.find((p) => p.path === projectPath);
   return {
     running: isRunning,
-    port: isRunning ? project?.devPort : undefined,
+    port: isRunning ? devServerPorts.get(projectPath) : undefined,
   };
 });
 
@@ -701,18 +705,6 @@ ipcMain.handle("unwatch-directory", (_event, dirPath: string) => {
   }
 });
 
-// Register custom protocol for serving local asset files
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: "local-asset",
-    privileges: {
-      bypassCSP: true,
-      stream: true,
-      supportFetchAPI: true,
-    },
-  },
-]);
-
 // Open file with system default application
 ipcMain.handle("open-with-system", (_event, filePath: string) => {
   return shell.openPath(filePath);
@@ -726,14 +718,6 @@ ipcMain.handle("read-file-text", (_event, filePath: string) => {
 
 // App lifecycle
 app.whenReady().then(() => {
-  // Register protocol handler for local asset files
-  protocol.handle("local-asset", (request) => {
-    const filePath = decodeURIComponent(
-      request.url.replace("local-asset://file/", ""),
-    );
-    return net.fetch(`file://${filePath}`);
-  });
-
   setupAutoUpdater();
   applyDockIcon();
   createWindow();
@@ -742,9 +726,10 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   // Kill all dev servers on quit
   for (const [, child] of devServers) {
-    child.kill();
+    killDevServerProcess(child);
   }
   devServers.clear();
+  devServerPorts.clear();
 
   // Close all directory watchers
   for (const [, watcher] of dirWatchers) {

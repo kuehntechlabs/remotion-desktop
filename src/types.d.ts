@@ -10,7 +10,6 @@ export interface Project {
   name: string;
   path: string;
   createdAt: string;
-  devPort: number | null;
 }
 
 export interface UpdaterActionResult {
