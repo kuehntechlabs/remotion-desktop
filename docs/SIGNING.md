@@ -19,6 +19,7 @@ changes needed to toggle signing.
 | macOS: Gatekeeper rejects, user must right-click → Open, or `xattr -cr` | App opens normally on any Mac |
 | Windows: SmartScreen warns "Unknown Publisher" | Installer trusted out of the box (EV-equivalent via Trusted Signing) |
 | Auto-updates fail silently on macOS | Auto-updates work |
+| Intune push install fails silently on macOS | Intune push works (see [`INTUNE.md`](./INTUNE.md)) |
 
 ---
 
