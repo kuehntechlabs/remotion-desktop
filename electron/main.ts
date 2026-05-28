@@ -13,8 +13,74 @@ import { v4 as uuidv4 } from "uuid";
 import netModule from "net";
 
 // macOS / Linux GUI launches inherit a minimal PATH from launchd, missing
-// Homebrew, nvm, fnm, asdf etc. Spawn the user's login shell and copy its
-// PATH into our env so child processes can find npm/npx/node.
+// Homebrew, nvm, fnm, asdf etc. We do two things:
+//   1. Copy the login shell's PATH into our env so child processes (git,
+//      ffmpeg, etc.) can find tools the user expects.
+//   2. Resolve absolute paths for npm/npx — version managers like nvm/fnm
+//      sometimes don't export PATH cleanly for non-interactive `-ilc` calls,
+//      so we also probe known install locations as a fallback.
+let npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+let npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
+
+function listVersionedToolPaths(dir: string, suffix: string[]): string[] {
+  if (!fs.existsSync(dir)) return [];
+  try {
+    const versions = fs.readdirSync(dir).sort().reverse();
+    return versions.map((v) => path.join(dir, v, ...suffix));
+  } catch {
+    return [];
+  }
+}
+
+function findToolViaLoginShell(tool: string): string | null {
+  const shell = process.env.SHELL || "/bin/zsh";
+  try {
+    const stdout = execSync(
+      `${shell} -ilc 'command -v ${tool} 2>/dev/null || true'`,
+      { encoding: "utf-8", timeout: 5000 },
+    );
+    const candidate = stdout.trim().split("\n").pop()?.trim() || "";
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function findToolInKnownLocations(tool: string): string | null {
+  const home = process.env.HOME || "";
+  const candidates: string[] = [];
+  if (home) {
+    candidates.push(
+      ...listVersionedToolPaths(path.join(home, ".nvm", "versions", "node"), [
+        "bin",
+        tool,
+      ]),
+    );
+    candidates.push(
+      ...listVersionedToolPaths(
+        path.join(home, ".local", "share", "fnm", "node-versions"),
+        ["installation", "bin", tool],
+      ),
+    );
+    candidates.push(
+      ...listVersionedToolPaths(
+        path.join(home, ".fnm", "node-versions"),
+        ["installation", "bin", tool],
+      ),
+    );
+    candidates.push(path.join(home, ".volta", "bin", tool));
+    candidates.push(path.join(home, ".asdf", "shims", tool));
+  }
+  candidates.push(`/opt/homebrew/bin/${tool}`);
+  candidates.push(`/usr/local/bin/${tool}`);
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
 function fixPath() {
   if (process.platform === "win32") return;
 
@@ -29,13 +95,35 @@ function fixPath() {
     const parts = stdout.split(delim);
     if (parts.length >= 3) {
       const userPath = parts[1].trim();
-      if (userPath) {
-        process.env.PATH = userPath;
-      }
+      if (userPath) process.env.PATH = userPath;
     }
   } catch {
     // Best effort — keep whatever PATH we had.
   }
+
+  const npm =
+    findToolViaLoginShell("npm") || findToolInKnownLocations("npm");
+  if (npm) {
+    npmCommand = npm;
+    const npmDir = path.dirname(npm);
+    const siblingNpx = path.join(npmDir, "npx");
+    npxCommand = fs.existsSync(siblingNpx)
+      ? siblingNpx
+      : findToolViaLoginShell("npx") ||
+        findToolInKnownLocations("npx") ||
+        npxCommand;
+
+    // Make sure child processes can resolve node (npm's shebang is
+    // `#!/usr/bin/env node`, so node must be on PATH for npm to launch).
+    const segments = (process.env.PATH || "").split(":");
+    if (!segments.includes(npmDir)) {
+      process.env.PATH = [npmDir, process.env.PATH].filter(Boolean).join(":");
+    }
+  }
+
+  console.log(`[remotion] npm: ${npmCommand}`);
+  console.log(`[remotion] npx: ${npxCommand}`);
+  console.log(`[remotion] PATH: ${process.env.PATH}`);
 }
 
 fixPath();
@@ -100,9 +188,6 @@ function writeConfig(config: AppConfig) {
 // Dev server process tracking
 const devServers: Map<string, ChildProcess> = new Map();
 const devServerPorts: Map<string, number> = new Map();
-
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-const npxCommand = process.platform === "win32" ? "npx.cmd" : "npx";
 
 // On Windows, child.kill() does not reliably terminate npm's grandchildren
 // (the actual node / remotion processes), leaving the dev-server port stuck.
@@ -175,8 +260,18 @@ function findFreePort(): Promise<number> {
 // Main window
 let mainWindow: BrowserWindow | null = null;
 
+// Async listeners (child process 'close', fs watchers, updater events) can fire
+// after the window is destroyed during app quit. `?.` only guards against null —
+// not against a window whose webContents has already been torn down.
+function sendToRenderer(channel: string, ...args: unknown[]) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  if (wc.isDestroyed()) return;
+  wc.send(channel, ...args);
+}
+
 function sendUpdaterEvent(payload: UpdaterEventPayload) {
-  mainWindow?.webContents.send("updater-event", payload);
+  sendToRenderer("updater-event", payload);
 }
 
 function setupAutoUpdater() {
@@ -228,6 +323,10 @@ function createWindow() {
       nodeIntegration: false,
       webviewTag: true,
     },
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -605,7 +704,7 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
       devServerPorts.delete(projectPath);
       const message =
         error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT"
-          ? "npm wurde nicht gefunden. Bitte installiere Node.js (https://nodejs.org) und starte die App neu."
+          ? `npm wurde nicht gefunden (versucht: ${npmCommand}). Bitte installiere Node.js (https://nodejs.org) und starte die App neu.`
           : `Dev-Server konnte nicht gestartet werden: ${error instanceof Error ? error.message : String(error)}`;
       reject(new Error(message));
     });
@@ -614,7 +713,7 @@ ipcMain.handle("start-dev-server", async (_event, projectPath: string) => {
   child.on("close", () => {
     devServers.delete(projectPath);
     devServerPorts.delete(projectPath);
-    mainWindow?.webContents.send("dev-server-stopped", projectPath);
+    sendToRenderer("dev-server-stopped", projectPath);
   });
 
   // Wait for the server to actually be ready before returning
@@ -730,7 +829,7 @@ ipcMain.handle("watch-directory", (_event, dirPath: string, label: string) => {
   const watcher = fs.watch(dirPath, { recursive: true }, () => {
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(() => {
-      mainWindow?.webContents.send("directory-changed", dirPath, label);
+      sendToRenderer("directory-changed", dirPath, label);
     }, 300);
   });
 
