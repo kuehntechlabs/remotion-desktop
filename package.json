@@ -10,7 +10,9 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build:renderer": "tsc && vite build",
+    "build": "node scripts/build.js",
+    "build:ci": "npm run build:renderer && electron-builder",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "autoprefixer": "^10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.4.5",
     "electron": "^41.2.0",
     "electron-builder": "^26.8.1",
     "lucide-react": "^1.8.0",
@@ -37,50 +40,5 @@
     "vite": "^6.4.2",
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.6"
-  },
-  "build": {
-    "appId": "com.remotion.desktop",
-    "productName": "Remotion Desktop",
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ],
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
-        }
-      ],
-      "icon": "build/icon.icns",
-      "artifactName": "RemotionDesktop.${ext}"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.ico",
-      "artifactName": "RemotionDesktop.${ext}"
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "kuehntechlabs",
-        "repo": "remotion-desktop"
-      }
-    ]
   }
 }

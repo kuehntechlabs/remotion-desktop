@@ -1,0 +1,92 @@
+// electron-builder configuration with conditional code signing.
+//
+// Signing turns on automatically when the relevant env vars are present:
+//   - macOS:   APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID  (notarisation)
+//              CSC_LINK + CSC_KEY_PASSWORD                              (Developer ID cert)
+//   - Windows: AZURE_TENANT_ID + AZURE_CLIENT_ID + AZURE_CLIENT_SECRET
+//              + AZURE_CODE_SIGNING_ACCOUNT_NAME + AZURE_CERT_PROFILE_NAME
+//
+// If a group is missing, that platform is built unsigned. Locally, values come
+// from .env (loaded via dotenv-cli in the npm script). In CI, they come from
+// GitHub secrets mapped into the build step's env.
+
+const hasAppleSigning = Boolean(
+  process.env.CSC_LINK && process.env.CSC_KEY_PASSWORD,
+);
+const hasAppleNotarization = Boolean(
+  process.env.APPLE_ID &&
+    process.env.APPLE_APP_SPECIFIC_PASSWORD &&
+    process.env.APPLE_TEAM_ID,
+);
+const hasAzureSigning = Boolean(
+  process.env.AZURE_TENANT_ID &&
+    process.env.AZURE_CLIENT_ID &&
+    process.env.AZURE_CLIENT_SECRET &&
+    process.env.AZURE_CODE_SIGNING_ACCOUNT_NAME &&
+    process.env.AZURE_CERT_PROFILE_NAME,
+);
+
+const macConfig = {
+  target: [
+    { target: "dmg", arch: ["arm64"] },
+    { target: "zip", arch: ["arm64"] },
+  ],
+  icon: "build/icon.icns",
+  artifactName: "RemotionDesktop.${ext}",
+};
+
+if (hasAppleSigning) {
+  macConfig.hardenedRuntime = true;
+  macConfig.gatekeeperAssess = false;
+  macConfig.entitlements = "build/entitlements.mac.plist";
+  macConfig.entitlementsInherit = "build/entitlements.mac.plist";
+  macConfig.notarize = hasAppleNotarization;
+}
+
+const winConfig = {
+  target: [{ target: "nsis", arch: ["x64"] }],
+  icon: "build/icon.ico",
+  artifactName: "RemotionDesktop.${ext}",
+};
+
+if (hasAzureSigning) {
+  winConfig.azureSignOptions = {
+    publisherName: "Remotion Desktop",
+    endpoint: "https://eus.codesigning.azure.net/",
+    codeSigningAccountName: process.env.AZURE_CODE_SIGNING_ACCOUNT_NAME,
+    certificateProfileName: process.env.AZURE_CERT_PROFILE_NAME,
+  };
+}
+
+if (!hasAppleSigning) {
+  console.log("[electron-builder] macOS: building unsigned (no CSC_LINK)");
+} else if (!hasAppleNotarization) {
+  console.log(
+    "[electron-builder] macOS: signing without notarisation (APPLE_ID missing)",
+  );
+} else {
+  console.log("[electron-builder] macOS: signed + notarised");
+}
+
+if (!hasAzureSigning) {
+  console.log(
+    "[electron-builder] Windows: building unsigned (Azure secrets missing)",
+  );
+} else {
+  console.log("[electron-builder] Windows: signed via Azure Trusted Signing");
+}
+
+module.exports = {
+  appId: "com.remotion.desktop",
+  productName: "Remotion Desktop",
+  files: ["dist/**/*", "dist-electron/**/*"],
+  mac: macConfig,
+  win: winConfig,
+  publish: [
+    {
+      provider: "github",
+      owner: "kuehntechlabs",
+      repo: "remotion-desktop",
+    },
+  ],
+};
